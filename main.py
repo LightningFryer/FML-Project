@@ -126,7 +126,7 @@ csv_path = r"dataset\datasets\nih-chest-xrays\sample\versions\4\sample_labels.cs
 batch_size = 32
 num_epochs = 20
 lr = 1e-4
-num_workers = 4  # set to 0 if you want to disable multiprocessing while debugging on Windows
+num_workers = 0
 
 # Prepare dataframe and disease list
 df, img_col_name, disease_list = prepare_dataframe(csv_path)

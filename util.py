@@ -58,7 +58,8 @@ if __name__ == "__main__":
     # Example classes (you should pass your actual labels from the dataset CSV)
     class_names = ["Hernia", "Pneumonia", "Fibrosis", "Edema", "Emphysema", "Cardiomegaly", "Pleural_Thickening", "Consolidation", "Pneumothorax", "Mass", "Nodule", "Atelectasis", "Effusion", "Infiltration", "No Finding"]
 
-    image_path = r"dataset\datasets\nih-chest-xrays\sample\versions\4\sample\images\00000017_001.png"
+    # image_path = r"dataset\datasets\nih-chest-xrays\sample\versions\4\sample\images\00000013_005.png"
+    image_path = r"./infiltrate.png"
     results = predict_image(model, image_path, device, class_names)
     result_labels = []
     result_probs = []
