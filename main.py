@@ -48,20 +48,17 @@ class ChestXrayDataset(Dataset):
         return image, labels
 
 def train_model(model, dataloaders, criterion, optimizer, scheduler, device, num_epochs=5, use_amp=True):
-    scaler = GradScaler() if use_amp and device.type == "cuda" else None
+    scaler = GradScaler(device="cuda") if use_amp and device.type == "cuda" else None
 
     for epoch in range(num_epochs):
         print(f"\nEpoch {epoch+1}/{num_epochs}")
         print("-" * 30)
         for phase in ["train", "val"]:
-            if phase == "train":
-                model.train()
-            else:
-                model.eval()
+            model.train() if phase == "train" else model.eval()
 
             running_loss = 0.0
             loader = dataloaders[phase]
-            loop = tqdm(loader, desc=f"{"Training" if phase == "train" else "Validation"} epoch {epoch+1}")
+            loop = tqdm(loader, desc=f"{'Training' if phase == 'train' else 'Validation'} epoch {epoch+1}")
 
             for inputs, labels in loop:
                 inputs = inputs.to(device, non_blocking=True)
@@ -70,8 +67,7 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device, num
                 optimizer.zero_grad()
 
                 if scaler is not None:
-                    # use autocast with correct device string
-                    with autocast(device.type):
+                    with autocast("cuda"):
                         outputs = model(inputs)
                         loss = criterion(outputs, labels)
                     if phase == "train":
@@ -92,11 +88,11 @@ def train_model(model, dataloaders, criterion, optimizer, scheduler, device, num
             epoch_loss = running_loss / len(loader.dataset)
             print(f"{phase} Loss: {epoch_loss:.4f}")
 
-            # step scheduler after training phase (per epoch)
             if phase == "train" and scheduler is not None:
                 scheduler.step()
 
     return model
+
 
 # -------- Utility to prepare dataframe & disease list --------
 def prepare_dataframe(csv_path):
@@ -122,56 +118,58 @@ def prepare_dataframe(csv_path):
 
     return df, img_col, disease_list
 
-# -------- Main --------
-def main():
-    # Paths - adjust these
-    img_dir = r"dataset\datasets\nih-chest-xrays\sample\versions\4\sample\images"      # <-- change to your images folder
-    csv_path = r"dataset\datasets\nih-chest-xrays\sample\versions\4\sample_labels.csv"  # <-- change to your CSV
 
-    # Hyperparams
-    batch_size = 16
-    num_epochs = 20
-    lr = 1e-4
-    num_workers = 0  # set to 0 if you want to disable multiprocessing while debugging on Windows
+img_dir = r"dataset\datasets\nih-chest-xrays\sample\versions\4\sample\images"      
+csv_path = r"dataset\datasets\nih-chest-xrays\sample\versions\4\sample_labels.csv" 
 
-    # Prepare dataframe and disease list
-    df, img_col_name, disease_list = prepare_dataframe(csv_path)
-    print("Image column:", img_col_name)
-    print("Disease list:", disease_list)
+# Hyperparams
+batch_size = 32
+num_epochs = 20
+lr = 1e-4
+num_workers = 4  # set to 0 if you want to disable multiprocessing while debugging on Windows
 
-    # If using the NIH "Finding Labels" CSV, keep that column and the image column
-    if "Finding Labels" in df.columns:
-        use_df = df[[img_col_name, "Finding Labels"]].copy()
-    else:
-        use_df = df.copy()
+# Prepare dataframe and disease list
+df, img_col_name, disease_list = prepare_dataframe(csv_path)
+# print("Image column:", img_col_name)
+# print("Disease list:", disease_list)
 
-    train_df, val_df = train_test_split(use_df, test_size=0.2, random_state=42, shuffle=True)
+# If using the NIH "Finding Labels" CSV, keep that column and the image column
+if "Finding Labels" in df.columns:
+    use_df = df[[img_col_name, "Finding Labels"]].copy()
+else:
+    use_df = df.copy()
 
-    # Transforms (EfficientNet-B4 native-ish size)
-    data_transforms = {
-        "train": transforms.Compose([
-            transforms.Resize((380, 380)),
-            transforms.RandomHorizontalFlip(),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406],
-                                 [0.229, 0.224, 0.225]),
-        ]),
-        "val": transforms.Compose([
-            transforms.Resize((380, 380)),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406],
-                                 [0.229, 0.224, 0.225]),
-        ]),
-    }
+train_df, val_df = train_test_split(use_df, test_size=0.2, random_state=42, shuffle=True)
 
-    # Datasets & loaders
-    train_ds = ChestXrayDataset(train_df, img_dir, disease_list, transform=data_transforms["train"], img_col_name=img_col_name)
-    val_ds = ChestXrayDataset(val_df, img_dir, disease_list, transform=data_transforms["val"], img_col_name=img_col_name)
+# Transforms (EfficientNet-B4 native-ish size)
+data_transforms = {
+    "train": transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406],
+                                [0.229, 0.224, 0.225]),
+    ]),
+    "val": transforms.Compose([
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize([0.485, 0.456, 0.406],
+                                [0.229, 0.224, 0.225]),
+    ]),
+}
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
-    dataloaders = {"train": train_loader, "val": val_loader}
+# Datasets & loaders
+train_ds = ChestXrayDataset(train_df, img_dir, disease_list, transform=data_transforms["train"], img_col_name=img_col_name)
+val_ds = ChestXrayDataset(val_df, img_dir, disease_list, transform=data_transforms["val"], img_col_name=img_col_name)
 
+train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=True)
+val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=True)
+dataloaders = {"train": train_loader, "val": val_loader}
+
+
+if __name__ == "__main__":
+    multiprocessing.freeze_support()
+        
     # Device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print("Using device:", device)
@@ -192,7 +190,3 @@ def main():
     # Save
     torch.save(model.state_dict(), f"{model_name}_chestxray.pth")
     print("Training finished and model saved.")
-
-if __name__ == "__main__":
-    multiprocessing.freeze_support()
-    main()
