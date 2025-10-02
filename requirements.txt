@@ -4,3 +4,4 @@ tqdm
 timm
 pandas
 matplotlib
+opencv-python

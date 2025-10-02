@@ -124,7 +124,7 @@ csv_path = r"dataset\datasets\nih-chest-xrays\sample\versions\4\sample_labels.cs
 
 # Hyperparams
 batch_size = 32
-num_epochs = 20
+num_epochs = 10
 lr = 1e-4
 num_workers = 0
 
